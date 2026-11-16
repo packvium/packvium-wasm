@@ -33,8 +33,8 @@ body:
     id: version
     attributes:
       label: Package version
-      description: The exact version installed, for example 1.10.0.
-      placeholder: "1.10.0"
+      description: The exact version installed, for example 1.11.0.
+      placeholder: "1.11.0"
     validations:
       required: true
   - type: input
@@ -101,5 +101,5 @@ body:
       options:
         - label: I searched the existing issues and did not find this one.
           required: true
-        - label: I read [docs/GUARANTEES.md](https://github.com/toxakara/packvium-wasm/blob/HEAD/docs/GUARANTEES.md) and this is not something it says the library does not guarantee.
+        - label: I read [docs/GUARANTEES.md](https://github.com/packvium/packvium-wasm/blob/HEAD/docs/GUARANTEES.md) and this is not something it says the library does not guarantee.
           required: false

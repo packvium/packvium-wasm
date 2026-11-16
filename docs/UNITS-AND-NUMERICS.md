@@ -10,6 +10,8 @@ One internal length tick is `1/16000 mm`.
 
 Accepted inputs include integers, decimal strings, fractions (`3/16`) and mixed fractions (`12 3/8`), with `mm`, `cm`, `m`, `in`, `ft`, and ticks. A binary float with a fractional part is intentionally rejected by the Python API, by `Length` and `Weight` alike (`TypeError`); an integral float such as `100.0` is exact, and is what JavaScript sends for `100`, so it is accepted as that integer. PHP type declarations accept only integer/string/structured values.
 
+The written grammar is one and the same in all four engines (1.11): an optional sign, ASCII digits, and an optional fraction part with at least one digit on each side of the point and at most 18 after it; or a fraction `n/d`; or a mixed fraction `w n/d`. A unit suffix is matched ignoring ASCII case (`100 MM`, `1 KG`). Nothing else is a measure -- not `100.`, `.5`, `0x64`, `1e2`, `1_0`, nor digits outside ASCII -- and each is refused as `wrong_type`, `must be a measure`. Until 1.11 each language's own number parser decided the edge cases, and they disagreed.
+
 ## Weight
 
 One weight tick is `1/8 microgram`, allowing exact common metric units and exact international avoirdupois conversions used by the package.

@@ -1,20 +1,12 @@
 # @packvium/browser
 
-Packvium's deterministic packing engine for browsers and other WebAssembly runtimes.
-The package contains the compiled engine; consumers do not need Rust or a separate
-download.
+Deterministic 3D bin packing and cartonization in the browser. This is the Packvium Rust
+engine compiled to WebAssembly: the package contains the compiled module, so you need
+neither Rust nor a separate download, and nothing is sent to a server.
 
 Use it to pick the smallest carton for an order, build a pallet, load a shipping container,
-or load a truck within its axle ratings and delivery-stop order, all client-side with no
-server round trip. Every answer comes back as coordinates and rotations for each item, with
-a reason for anything that did not fit, and each placement carries a `placement_id` that a
-later request's `fixed_placements` can quote to pin exactly that box. Under every objective but
-`shipping_cost` and `lowest_landed_cost` it also states `optimality.lower_bound`: a complete
-answer that attains it reports `optimal`, which proves no packing obeying the request's rules
-scores better, and any other carries the gap to the bound.
-
-Full documentation, the constraint reference and benchmarks live at
-[packvium.com](https://packvium.com).
+or load a truck within its axle ratings and delivery-stop order. Every answer comes back as
+coordinates and rotations for each item, with a reason for anything that did not fit.
 
 ## Install
 
@@ -65,46 +57,43 @@ and moves items between that result's containers to reduce the spread of their p
 keeping every move that an independent validation accepts. It has the same name, arguments
 and answer as `@packvium/engine`'s `rebalanceWeight`; `maxMoves` defaults to 64.
 
-Support is not required by default: `minimum_support_ratio` is 0, so an item may rest on
-nothing above the container floor, and the result then says so in `warnings`
-(`unsupported_placements: N placement(s) rest on nothing above the container floor; ...`).
-To require support, set it above 0 — `configuration: { minimum_support_ratio: 0.75 }` for three quarters of the base.
-
 Lengths and weights are strings on purpose: they are parsed into exact integers, so `'0.1'` is a
 tenth of a millimetre and never `0.09999999999999999`. The request and result are the same JSON
 document every Packvium engine reads and writes; this package is the Rust engine compiled to
 WebAssembly, so its answers are the Rust engine's own.
 
-### Browsers, bundlers and Node
+Each placement carries a `placement_id` that a later request's `fixed_placements` can quote to
+pin exactly that box. Under every objective but `shipping_cost` and `lowest_landed_cost` the
+result also states `optimality.lower_bound`: a complete answer that attains it reports
+`optimal`, which proves no packing obeying the request's rules scores better, and any other
+carries the gap to the bound.
 
-The package has two entry points, chosen by `package.json`'s `exports` conditions:
+## Using it in your project
 
-- **browsers and bundlers** get the web build, which fetches the `.wasm` file sitting next to
-  the module. Serve the package's `src/pkg/` directory with your other assets (bundlers that
-  understand `new URL(..., import.meta.url)` do this for you);
-- **Node** gets an entry point that reads the same `.wasm` bytes from disk, because Node's
-  `fetch` cannot open a `file:` URL. Nothing to configure: `import ... from '@packvium/browser'`
-  works in Node 18+, in server-side rendering and in a Node-environment test run.
+[`checkout.mjs`](examples/checkout.mjs) is written the way a cart page uses the package.
+The customer changes a quantity; one function packs the cart, checks the plan with
+`validate`, prices each parcel with `commerce.quote`, and returns what the page should
+render. A cart that is itself wrong (a quantity of zero) comes back with a JSON Pointer to
+the input to mark, and nothing is thrown at the customer.
 
-`init()` also accepts a loader function, for a runtime that can do neither: it must return the
-generated module's namespace, already initialized, or one whose `default` export initializes it.
+Because the tariff is pinned by version and every amount is an exact integer, your server
+computes the same parcels and the same price from the same request when the order is
+placed. `@packvium/engine` has the server-side counterpart of this example.
 
-## Deterministic results
+Rules that most projects need on day one:
 
-`configuration.time_limit_ms` is a wall clock, and how far a search gets in it depends on the
-device -- a phone and a workstation can return different answers to the same request when the
-clock stops the search. `configuration.effort_budget` counts work instead (candidates evaluated,
-placements attempted, search nodes, restarts), so the search stops at the same point on every
-device. For anything you store or compare, set an `effort_budget` and a generous `time_limit_ms`
-as a fuse. `result.algorithm.time_limit_reached` tells you when the clock decided anyway.
-
-`effort_limit` means the budget stopped work the search still had: a search that finishes on
-exactly its budget reads `complete`, and `termination.any_start_truncated` says whether the
-budget cut a start that might have won.
+- An item that does not fit is not an error. The result lists it in `unpacked_items` with a
+  reason, and everything else is still packed.
+- Support is not required by default: `minimum_support_ratio` is 0, so an item may rest on
+  nothing above the container floor, and the result then says so in `warnings`
+  (`unsupported_placements: N placement(s) rest on nothing above the container floor; ...`).
+  To require support, set it above 0: `configuration: { minimum_support_ratio: 0.75 }` for three quarters of the base.
+- Set an `effort_budget` for any answer you store or show twice. See
+  [Getting the same answer every time](#getting-the-same-answer-every-time).
 
 ## Errors
 
-A request that is wrong -- a missing field, a count of zero, an unknown unit -- is refused before
+A request that is wrong (a missing field, a count of zero, an unknown unit) is refused before
 anything is solved, with the same error classes `@packvium/engine` throws, exported from this
 package under the same names:
 
@@ -128,10 +117,55 @@ not fit completely is not an error: the result lists what was left out, and why,
 
 The commerce functions report a malformed document or request as a `CommerceInputError`.
 
-### Quoting, policy and catalog versions
+## Checking a result
+
+*New in 1.7.0.*
+
+`validate(request, result)` checks a result against the request it answers, from the JSON alone:
+geometry, support and load, accounting, the result's facts and its score. It is the same
+reference validator every Packvium package exports, so it returns the same list:
+
+```js
+import { MalformedResult, pack, validate } from '@packvium/browser';
+
+const issues = await validate(request, await pack(request)); // [] -- valid
+// [{ code: 'collision', detail: 'cube#1 with cube#2 in box#1' }] for two boxes in one place
+```
+
+It judges any engine's result, not only this package's. A result without the documented shape
+rejects with `MalformedResult`, whose `kind` is `contract` or `shape`.
+
+## Getting the same answer every time
+
+`configuration.time_limit_ms` is a wall clock, and how far a search gets in it depends on the
+device: a phone and a workstation can return different answers to the same request when the
+clock stops the search. `configuration.effort_budget` counts work instead (candidates evaluated,
+placements attempted, search nodes, restarts), so the search stops at the same point on every
+device. For anything you store or compare, set an `effort_budget` and a generous `time_limit_ms`
+as a fuse. `result.algorithm.time_limit_reached` tells you when the clock decided anyway.
+
+`effort_limit` means the budget stopped work the search still had: a search that finishes on
+exactly its budget reads `complete`, and `termination.any_start_truncated` says whether the
+budget cut a start that might have won.
+
+## Browsers, bundlers and Node
+
+The package has two entry points, chosen by `package.json`'s `exports` conditions:
+
+- **browsers and bundlers** get the web build, which fetches the `.wasm` file sitting next to
+  the module. Serve the package's `src/pkg/` directory with your other assets (bundlers that
+  understand `new URL(..., import.meta.url)` do this for you);
+- **Node** gets an entry point that reads the same `.wasm` bytes from disk, because Node's
+  `fetch` cannot open a `file:` URL. Nothing to configure: `import ... from '@packvium/browser'`
+  works in Node 18+, in server-side rendering and in a Node-environment test run.
+
+`init()` also accepts a loader function, for a runtime that can do neither: it must return the
+generated module's namespace, already initialized, or one whose `default` export initializes it.
+
+## Quotes, policy and catalog versions
 
 `commerce` provides the same deterministic commercial/control-plane API as every other
-Packvium package — `quote()`, `evaluatePolicy()` and `catalogVersionInfo()`, all over one
+Packvium package: `quote()`, `evaluatePolicy()` and `catalogVersionInfo()`, all over one
 document you supply, with no server round-trip:
 
 ```js
@@ -152,26 +186,8 @@ const quote = await commerce.quote(commerceDocument, {
 console.log(quote.quote.total_minor);
 ```
 
-The full contract — document format, every result shape, all rejection codes — is
-[COMMERCE-API.md](https://github.com/toxakara/packvium-wasm/blob/main/docs/COMMERCE-API.md).
-
-## Checking a result
-
-*New in 1.7.0.*
-
-`validate(request, result)` checks a result against the request it answers, from the JSON alone:
-geometry, support and load, accounting, the result's facts and its score. It is the same
-reference validator every Packvium package exports, so it returns the same list:
-
-```js
-import { MalformedResult, pack, validate } from '@packvium/browser';
-
-const issues = await validate(request, await pack(request)); // [] -- valid
-// [{ code: 'collision', detail: 'cube#1 with cube#2 in box#1' }] for two boxes in one place
-```
-
-It judges any engine's result, not only this package's. A result without the documented shape
-rejects with `MalformedResult`, whose `kind` is `contract` or `shape`.
+The full contract (document format, every result shape, all rejection codes) is
+[COMMERCE-API.md](https://github.com/packvium/packvium-wasm/blob/main/docs/COMMERCE-API.md).
 
 ## Examples
 
@@ -180,6 +196,7 @@ and execute without a project around it.
 
 | File | What it shows |
 | --- | --- |
+| [`checkout.mjs`](examples/checkout.mjs) | A cart page that shows parcels and a shipping estimate without calling your server: pack, validate and quote in one function, and a form error for a cart that is wrong. |
 | [`basic.mjs`](examples/basic.mjs) | Initialize the module, pack an order, read placements, and see why an item was refused. |
 | [`objectives.mjs`](examples/objectives.mjs) | Three objectives choosing different boxes for the same order, with the lower bound each answer states; a rate card priced in a declared `currency`; and `keep_upright`, `incompatible_tags`, `max_top_load` and `pallet_overhang_limit` changing what may be packed where. |
 | [`errors.mjs`](examples/errors.mjs) | What a refused request looks like across WebAssembly: the error class, and its code, reason, field and detail. |
@@ -190,7 +207,7 @@ and execute without a project around it.
 node examples/basic.mjs
 ```
 
-All five run unchanged in Node and, through a bundler, in a browser: they import
+All six run unchanged in Node and, through a bundler, in a browser: they import
 `@packvium/browser` by name and let the package pick its entry point.
 
 ## Documentation
@@ -199,31 +216,12 @@ The documentation is in the source repository, not in the npm package.
 
 | Document | Covers |
 | --- | --- |
-| [GUARANTEES.md](https://github.com/toxakara/packvium-wasm/blob/main/docs/GUARANTEES.md) | What is promised and what is not. Start here. |
-| [PUBLIC-API.md](https://github.com/toxakara/packvium-wasm/blob/main/docs/PUBLIC-API.md) | Inputs, outputs and status semantics. |
-| [UNITS-AND-NUMERICS.md](https://github.com/toxakara/packvium-wasm/blob/main/docs/UNITS-AND-NUMERICS.md) | Units, accepted input forms, rounding policy. |
-| [COMMERCE-API.md](https://github.com/toxakara/packvium-wasm/blob/main/docs/COMMERCE-API.md) | The commercial/control-plane contract. |
+| [GUARANTEES.md](https://github.com/packvium/packvium-wasm/blob/main/docs/GUARANTEES.md) | What is promised and what is not. Start here. |
+| [PUBLIC-API.md](https://github.com/packvium/packvium-wasm/blob/main/docs/PUBLIC-API.md) | Inputs, outputs and status semantics. |
+| [UNITS-AND-NUMERICS.md](https://github.com/packvium/packvium-wasm/blob/main/docs/UNITS-AND-NUMERICS.md) | Units, accepted input forms, rounding policy. |
+| [COMMERCE-API.md](https://github.com/packvium/packvium-wasm/blob/main/docs/COMMERCE-API.md) | The commercial/control-plane contract. |
 
-## The Packvium family
-
-One request and result contract, implemented independently in four engines (Rust,
-Python, PHP, JavaScript) and checked against each other on a shared fixture set: Python and
-PHP to identical placements, Rust and JavaScript to a valid packing that scores no worse
-than a per-fixture floor.
-Pick the package for your stack; mixing them in one system is safe.
-
-Documentation, the constraint reference and the benchmarks are at
-[packvium.com](https://packvium.com).
-
-| Package | Install | Source |
-| --- | --- | --- |
-| Python — [`packvium`](https://pypi.org/project/packvium/) | `pip install packvium` | [packvium-python](https://github.com/toxakara/packvium-python) |
-| PHP — [`packvium/packvium`](https://packagist.org/packages/packvium/packvium) | `composer require packvium/packvium` | [packvium-php](https://github.com/toxakara/packvium-php) |
-| Rust — [`packvium`](https://crates.io/crates/packvium) | `packvium = "1.10"` | [packvium-rust](https://github.com/toxakara/packvium-rust) |
-| Node.js — [`@packvium/engine`](https://www.npmjs.com/package/@packvium/engine) | `npm install @packvium/engine` | [packvium-node](https://github.com/toxakara/packvium-node) |
-| Browser / WebAssembly — [`@packvium/browser`](https://www.npmjs.com/package/@packvium/browser) | `npm install @packvium/browser` | [packvium-wasm](https://github.com/toxakara/packvium-wasm) |
-| PHP FFI bridge — [`packvium/native-bridge`](https://packagist.org/packages/packvium/native-bridge) | `composer require packvium/native-bridge` | [packvium-php-bridge](https://github.com/toxakara/packvium-php-bridge) |
-| Python native selector — `packvium-native` | from source until the native wheels ship | [packvium-python-adapter](https://github.com/toxakara/packvium-python-adapter) |
+The constraint reference and the benchmarks are at [packvium.com](https://packvium.com).
 
 ## Requirements
 
@@ -236,6 +234,24 @@ The release tarball is assembled and tested together with the canonical Rust sou
 Its repository CI then tests the exact committed module, and tagged releases publish
 only after the package version and generated files have been verified.
 
+## The Packvium family
+
+One request and result contract, implemented independently in four engines (Rust,
+Python, PHP, JavaScript) and checked against each other on a shared fixture set: Python and
+PHP to identical placements, Rust and JavaScript to a valid packing that scores no worse
+than a per-fixture floor.
+Pick the package for your stack; mixing them in one system is safe.
+
+| Package | Install | Source |
+| --- | --- | --- |
+| Python — [`packvium`](https://pypi.org/project/packvium/) | `pip install packvium` | [packvium-python](https://github.com/packvium/packvium-python) |
+| PHP — [`packvium/packvium`](https://packagist.org/packages/packvium/packvium) | `composer require packvium/packvium` | [packvium-php](https://github.com/packvium/packvium-php) |
+| Rust — [`packvium`](https://crates.io/crates/packvium) | `packvium = "1.11"` | [packvium-rust](https://github.com/packvium/packvium-rust) |
+| Node.js — [`@packvium/engine`](https://www.npmjs.com/package/@packvium/engine) | `npm install @packvium/engine` | [packvium-node](https://github.com/packvium/packvium-node) |
+| Browser / WebAssembly — [`@packvium/browser`](https://www.npmjs.com/package/@packvium/browser) | `npm install @packvium/browser` | [packvium-wasm](https://github.com/packvium/packvium-wasm) |
+| PHP FFI bridge — [`packvium/native-bridge`](https://packagist.org/packages/packvium/native-bridge) | `composer require packvium/native-bridge` | [packvium-php-bridge](https://github.com/packvium/packvium-php-bridge) |
+| Python native selector — `packvium-native` | from source until the native wheels ship | [packvium-python-adapter](https://github.com/packvium/packvium-python-adapter) |
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports go through the process in
@@ -244,15 +260,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports go through the process 
 ## Citation
 
 If Packvium supports your research, cite it as software. GitHub's **Cite this repository**
-button reads [`CITATION.cff`](https://github.com/toxakara/packvium-wasm/blob/main/CITATION.cff), and
-[`codemeta.json`](https://github.com/toxakara/packvium-wasm/blob/main/codemeta.json) carries the same record in
+button reads [`CITATION.cff`](https://github.com/packvium/packvium-wasm/blob/main/CITATION.cff), and
+[`codemeta.json`](https://github.com/packvium/packvium-wasm/blob/main/codemeta.json) carries the same record in
 CodeMeta form.
 
 ```bibtex
 @software{packvium_wasm,
   author  = {{Packvium contributors}},
   title   = {Packvium for browsers},
-  version = {1.10.0},
+  version = {1.11.0},
   license = {MIT},
   url     = {https://packvium.com}
 }
