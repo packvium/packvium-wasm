@@ -4,6 +4,31 @@ What changed in `@packvium/browser` on npm, release by release. The format follo
 [Keep a Changelog](https://keepachangelog.com/1.1.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0]
+
+The browser build on the 1.11.0 core: bottom gussets and standing pouches, a certified bound
+for `shipping_cost` and `lowest_landed_cost`, and one money ceiling.
+
+### Added
+
+- **`bottom_gusset_depth` and `orientation: "standing"`** on a `gusseted_bag`.
+- **`optimality.lower_bound` and the gap under `shipping_cost` and `lowest_landed_cost`.**
+- **`examples/checkout.mjs`.**
+
+### Changed
+
+- **A `rate_table` priced above 9007199254740991 minor units** at its top bracket is refused at
+  admission.
+- **Measures follow the shared grammar,** including upper-case unit suffixes. `hull_vertices`
+  holds at most 32 points.
+- **`effort_budget` limits and `tag_limits` written as `1000.0`** are the integers they equal.
+
+### Fixed
+
+- **A JSON count of 2^32 truncated to 0 on wasm32** (`max_restarts`, `tag_limits`); it now
+  saturates.
+- **`validate_json` could panic** on a crafted result with mixed-type values.
+
 ## [1.10.0]
 
 A rebuild on the 1.10.0 Rust core: pallets may overhang their deck, mailers may have gussets, a

@@ -417,9 +417,19 @@ existing rule-pool storage.
   difference — `JSON.parse` gives the same `Number` for `1` and `1.0` — so this is the
   one shape where the four implementations cannot be made to agree, and the contract
   resolves it by requiring callers not to emit it. No fixture uses one.
-- JavaScript refuses, rather than rounds, a quote whose components exceed
-  `Number.MAX_SAFE_INTEGER`. The arithmetic itself runs in `BigInt`, so nothing drifts
-  through a double; what cannot be done is *reporting* a value a JSON number cannot hold
-  exactly. Python has no such ceiling, Rust takes every product in `i128`, and PHP falls
-  back to decimal-string arithmetic. The bound is far above any real tariff — nine
-  quadrillion minor currency units.
+- Every engine refuses, rather than rounds, a quote that reports an amount above
+  `2^53 - 1` (`9007199254740991`): `dimensional_weight_g`, `billed_weight_g`,
+  `base_charge_minor`, `fuel_surcharge_minor`, any accessorial charge, or `total_minor`,
+  checked in that order. The arithmetic itself is exact in all four -- unbounded integers
+  in Python, `BigInt` in JavaScript, `i128` in Rust, decimal strings in PHP -- so nothing
+  drifts or wraps on the way; what cannot be done is *reporting* a value a JSON number
+  cannot hold exactly. The refusal is the input error of the language, with the message
+  `quote amount {value} is above 9007199254740991 and cannot be represented exactly`.
+  Until 1.11 only JavaScript refused; Python answered without a ceiling, and Rust and PHP
+  answered up to `2^63 - 1`. The bound is far above any real tariff — nine quadrillion
+  minor currency units.
+- JavaScript refuses an input integer above `2^53 - 1` with `expected an exact integer`:
+  `JSON.parse` has already rounded it, so no exact arithmetic after that can recover the
+  value the caller sent. Python computes from such an input exactly and PHP and Rust read it
+  up to `2^63 - 1`, so an engine may answer a quote JavaScript refuses; callers should not
+  send one. No fixture does.

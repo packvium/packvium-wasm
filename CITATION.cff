@@ -5,10 +5,10 @@ type: software
 authors:
   - name: "Packvium contributors"
     website: "https://packvium.com"
-version: "1.10.0"
+version: "1.11.0"
 license: MIT
 url: "https://packvium.com"
-repository-code: "https://github.com/toxakara/packvium-wasm"
+repository-code: "https://github.com/packvium/packvium-wasm"
 repository-artifact: "https://www.npmjs.com/package/@packvium/browser"
 abstract: >-
   Deterministic 3D bin-packing and cartonization engine for pallets, containers, trucks and shipping cartons. Exact integer geometry, reproducible results.
