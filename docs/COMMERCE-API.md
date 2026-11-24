@@ -257,9 +257,8 @@ are `null`. Boolean/integer equality follows the reference model (`true == 1`,
 `false == 0`), including inside lists and objects. `in` and `not_in` test list
 elements, string substrings, or object keys; object values are not members. A
 non-string context value cannot be a substring or an object key. A missing context
-field matches neither binary operator, including its negated form. Rust's rule priority
-comparison handles the entire signed 64-bit range without negating its minimum;
-portable JavaScript inputs remain limited by exact `Number` representation.
+field matches neither binary operator, including its negated form. A rule priority is an
+exact integer within `±(2^53 − 1)`, like every commerce integer.
 
 ### `catalog_version_info`
 
@@ -428,8 +427,9 @@ existing rule-pool storage.
   Until 1.11 only JavaScript refused; Python answered without a ceiling, and Rust and PHP
   answered up to `2^63 - 1`. The bound is far above any real tariff — nine quadrillion
   minor currency units.
-- JavaScript refuses an input integer above `2^53 - 1` with `expected an exact integer`:
-  `JSON.parse` has already rounded it, so no exact arithmetic after that can recover the
-  value the caller sent. Python computes from such an input exactly and PHP and Rust read it
-  up to `2^63 - 1`, so an engine may answer a quote JavaScript refuses; callers should not
-  send one. No fixture does.
+- Every engine refuses an input integer outside `±(2^53 - 1)` at its path with
+  `expected an exact integer`: `JSON.parse` has already rounded it, so no exact arithmetic
+  after that can recover the value the caller sent, and the other engines hold the same
+  line so that none answers a quote JavaScript refuses. Until 1.12 Python
+  computed from such an input exactly and PHP and Rust read it up to `2^63 - 1`. Pinned by
+  `conformance/commerce/fixtures/input-integer-above-safe-ceiling.json`.
