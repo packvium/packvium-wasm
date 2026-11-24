@@ -556,6 +556,10 @@ is true exactly when `winning_start_truncated || global_deadline_reached`, and
 
 ## Rejection proof
 
+`unpacked_items` lists the items in the order the request lists them, each item's instances
+by number, in every engine and every alternative. Which of several interchangeable
+instances a search leaves out is not part of the contract.
+
 Every entry in `unpacked_items` carries the same evidence shape in Python, PHP, Rust
 and JavaScript:
 
@@ -583,7 +587,7 @@ The four levels have deliberately different meanings:
 | Level | Meaning |
 | --- | --- |
 | `proven` | A request-level bound proves rejection without relying on search completeness. Currently `no_compatible_container_dimensions`, `payload_exceeded`, `rotation_restricted` and `no_eligible_container` — each a pure geometry or tag check across every container, none dependent on how far the search got. |
-| `observed` | The engine exhausted or rejected the candidates it actually examined; this is not a global impossibility proof. Currently `no_feasible_placement`, `search_exhausted`, `exact_search_incomplete` and `insufficient_support` — the last when replaying the finished layout finds a place the item fits once the support rules are set aside, and none with them, in every engine. |
+| `observed` | The engine exhausted or rejected the candidates it actually examined; this is not a global impossibility proof. Currently `no_feasible_placement` and `insufficient_support` — the last when replaying the finished layout finds a place the item fits once the support rules are set aside, and none with them, in every engine. Every engine names an item no finer diagnosis explains `no_feasible_placement`; `search_exhausted` and `exact_search_incomplete` remain valid codes a result may carry, at the same level, and a validator still reads them. |
 | `inferred` | The reason follows from solver state or a compound rule but has no complete certificate. |
 | `unknown_due_to_limit` | A deadline stopped the search, so no negative conclusion is claimed. |
 

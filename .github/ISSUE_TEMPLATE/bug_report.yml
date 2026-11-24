@@ -33,8 +33,8 @@ body:
     id: version
     attributes:
       label: Package version
-      description: The exact version installed, for example 1.11.0.
-      placeholder: "1.11.0"
+      description: The exact version installed, for example 1.12.0.
+      placeholder: "1.12.0"
     validations:
       required: true
   - type: input
